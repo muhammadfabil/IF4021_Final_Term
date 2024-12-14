@@ -1,1 +1,55 @@
-init
+# FingerFacts
+
+## Anggota
+
+1. Anggota 1 (NIM)
+2. Anggota 2 (NIM)
+
+---
+
+## Deskripsi
+
+FingerFacts adalah sebuah permainan interaktif berbasis kuis yang memadukan kecerdasan dan teknologi pengenalan gerakan tangan. Game ini dirancang untuk memberikan pengalaman bermain yang seru dan edukatif, di mana pemain dapat menjawab pertanyaan trivia hanya dengan menggunakan gerakan jari.
+
+Menggunakan teknologi **MediaPipe Hands** dan **OpenCV**, FingerFacts mendeteksi jumlah jari yang diangkat oleh pemain sebagai representasi jawaban atas pertanyaan yang diberikan. Dengan antarmuka yang sederhana dan intuitif, game ini cocok untuk segala usia, dari anak-anak hingga dewasa, baik untuk hiburan maupun pembelajaran. Game ini juga dilengkapi dengan gambar-gambar yang menarik pada soal agar pengguna tidak hanya melihat soal pilihan ganda.
+
+---
+
+## Requirements
+
+- `cv2`
+- `mediapipe`
+- `random`
+
+---
+
+## Cara Menjalankan
+
+1. Pastikan semua library yang diperlukan sudah terinstal dengan perintah:
+   ```bash
+   pip install opencv-python mediapipe
+   ```
+2. Jalankan skrip program:
+   ```bash
+   python fingerfacts.py
+   ```
+3. Ikuti instruksi pada layar untuk mulai bermain.
+
+---
+
+## Fitur Utama
+
+- **Interaksi Gestur Tangan:** Jawab pertanyaan dengan mengangkat jumlah jari yang sesuai.
+- **Desain Edukatif:** Soal-soal trivia yang menghibur dan mendidik.
+- **Visual Menarik:** Dilengkapi dengan gambar-gambar untuk setiap soal.
+
+---
+
+## Lisensi
+
+Proyek ini menggunakan lisensi [MIT](https://opensource.org/licenses/MIT).
+
+---
+
+Selamat bermain dan belajar dengan **FingerFacts**! 🚀
+
