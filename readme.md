@@ -2,8 +2,8 @@
 
 ## Anggota
 
-1. Anggota 1 (NIM)
-2. Anggota 2 (NIM)
+1. M. Bintang Erlangga H. (121140171)
+2. Muhammad Fabil (121140189)
 
 ---
 
@@ -31,7 +31,7 @@ Menggunakan teknologi **MediaPipe Hands** dan **OpenCV**, FingerFacts mendeteksi
    ```
 2. Jalankan skrip program:
    ```bash
-   python fingerfacts.py
+   python main.py
    ```
 3. Ikuti instruksi pada layar untuk mulai bermain.
 
