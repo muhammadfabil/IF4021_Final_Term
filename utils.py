@@ -1,6 +1,8 @@
 # utils.py
 
 import cv2
+from PIL import Image
+import numpy as np
 
 def count_fingers(hand_landmarks):
     """
@@ -22,17 +24,45 @@ def count_fingers(hand_landmarks):
 
     return count
 
-def load_question_image(image_path, frame_shape, width=300, height=200, y_offset=50):
-    """
-    Memuat dan menempatkan gambar pertanyaan ke dalam frame.
-    """
-    question_image = cv2.imread(image_path)
-    if question_image is None:
-        return None
 
-    # Resize gambar
-    question_image = cv2.resize(question_image, (width, height))
+
+def load_question_image(image_path, frame, width=300, height=261, y_offset=50):
+    """
+    Memuat dan menempatkan gambar pertanyaan ke dalam frame, mendukung transparansi, dan memastikan warna tidak berubah.
+    """
+    # Memuat gambar menggunakan PIL untuk mendukung transparansi
+    question_image = Image.open(image_path).convert("RGBA")
+    question_image = question_image.resize((width, height))
+
+    # Konversi ke format numpy array
+    question_image_np = np.array(question_image)
+
+    # Pisahkan saluran RGBA
+    r, g, b, a = cv2.split(question_image_np)  # Pisahkan saluran
+    bgr_image = cv2.merge([b, g, r])  # Gabungkan kembali dalam format BGR
+    alpha_channel = a
 
     # Hitung posisi tengah atas
-    x_offset = (frame_shape[1] - width) // 2
-    return question_image, (x_offset, y_offset, width, height)
+    x_offset = (frame.shape[1] - width) // 2
+    y_offset = max(0, y_offset)
+
+    # Pastikan area tempelan tidak keluar dari batas frame
+    y_end = min(y_offset + height, frame.shape[0])
+    x_end = min(x_offset + width, frame.shape[1])
+
+    # Pastikan ukuran slice frame dan gambar cocok
+    overlay_height = y_end - y_offset
+    overlay_width = x_end - x_offset
+
+    bgr_image = bgr_image[:overlay_height, :overlay_width]
+    alpha_channel = alpha_channel[:overlay_height, :overlay_width]
+
+    # Tempelkan gambar dengan transparansi
+    for c in range(0, 3):  # Untuk setiap kanal warna (BGR)
+        frame_slice = frame[y_offset:y_end, x_offset:x_end, c]
+        alpha = alpha_channel / 255.0  # Normalisasi alpha ke 0-1
+        frame[y_offset:y_end, x_offset:x_end, c] = \
+            (1 - alpha) * frame_slice + alpha * bgr_image[..., c]
+
+    return frame, (x_offset, y_offset, width, height)
+
