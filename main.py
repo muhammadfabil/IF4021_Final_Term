@@ -19,7 +19,10 @@ def reset_game():
         'score': 0,
         'wrong_attempts': 0,
         'waiting_for_next_question': False,
-        'game_state': 'opening'  # States: 'opening', 'playing', 'game_over'
+        'waiting_for_confirmation': False,
+        'current_question_number': 1,
+        'current_question': None,  # Store current question here
+        'game_state': 'opening'
     }
 
 # Initialize game state
@@ -40,9 +43,18 @@ logo_image = resize_image(logo_image, 400, 300)
 correct_image = resize_image(correct_image, 300, 200)
 game_over_image = resize_image(game_over_image, 400, 300)
 
-# Pilih pertanyaan pertama secara acak
-current_question = random.choice(game_data['remaining_questions'])
-game_data['remaining_questions'].remove(current_question)
+def get_next_question(game_data, increment_number=False):
+    if increment_number:
+        game_data['current_question_number'] += 1
+    
+    if game_data['remaining_questions']:
+        question = random.choice(game_data['remaining_questions'])
+        game_data['remaining_questions'].remove(question)
+        return question
+    return None
+
+# Get first question
+game_data['current_question'] = get_next_question(game_data)
 
 def overlay_image(frame, overlay, alpha_channel=True):
     if overlay is None:
@@ -64,6 +76,9 @@ def overlay_image(frame, overlay, alpha_channel=True):
     
     return frame
 
+start_time = time.time()
+timer_active = True
+
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
@@ -81,14 +96,35 @@ while cap.isOpened():
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
     elif game_data['game_state'] == 'playing':
-        # Tampilkan gambar pertanyaan
-        question_image, position = load_question_image(current_question["image"], frame)
+        # Show question number in top right
+        cv2.putText(frame, f"Soal: {game_data['current_question_number']}/10", 
+                   (frame.shape[1] - 150, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+        if timer_active:
+            elapsed_time = time.time() - start_time
+            remaining_time = max(0, 5 - elapsed_time)
         
-        # Tampilkan score dan kesalahan
+        cv2.putText(frame, f"Timer: {remaining_time:.1f}s", (10, 90), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+        # Tampilkan gambar pertanyaan
+        question_image, position = load_question_image(game_data['current_question']["image"], frame)
+
+        # Tampilkan skor dan kesalahan
         cv2.putText(frame, f"Score: {game_data['score']}", (10, 30), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         cv2.putText(frame, f"Kesalahan: {game_data['wrong_attempts']}/3", (10, 60), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+        if remaining_time <= 0 and timer_active and not game_data['waiting_for_confirmation']:
+            game_data['waiting_for_confirmation'] = True
+            timer_active = False
+
+        if game_data['waiting_for_confirmation']:
+            cv2.putText(frame, "Waktu habis! Tekan L untuk melanjutkan", 
+                       (int(frame.shape[1]/2) - 200, frame.shape[0] - 40), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
         if game_data['waiting_for_next_question']:
             frame = overlay_image(frame, correct_image)
@@ -96,8 +132,7 @@ while cap.isOpened():
                        (10, frame.shape[0] - 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-        # Deteksi tangan dan hitung jari yang diangkat
-        if results.multi_hand_landmarks and not game_data['waiting_for_next_question']:
+        if results.multi_hand_landmarks and not game_data['waiting_for_next_question'] and not game_data['waiting_for_confirmation']:
             for hand_landmarks in results.multi_hand_landmarks:
                 mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
                 fingers_count = count_fingers(hand_landmarks)
@@ -106,13 +141,10 @@ while cap.isOpened():
                     cv2.putText(frame, f"Jawaban Anda: {chr(64 + fingers_count)}", 
                               (10, 400), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-                    if fingers_count == current_question["answer"]:
+                    if fingers_count == game_data['current_question']["answer"]:
                         game_data['waiting_for_next_question'] = True
                         game_data['score'] += 1
-                    else:
-                        game_data['wrong_attempts'] += 1
-                        if game_data['wrong_attempts'] >= 3:
-                            game_data['game_state'] = 'game_over'
+                        timer_active = False
 
     elif game_data['game_state'] == 'game_over':
         frame = overlay_image(frame, game_over_image)
@@ -131,17 +163,35 @@ while cap.isOpened():
         break
     elif key == ord(' ') and game_data['game_state'] == 'opening':
         game_data['game_state'] = 'playing'
+        start_time = time.time()
+        timer_active = True
     elif key == ord('n') and game_data['waiting_for_next_question']:
-        if game_data['remaining_questions']:
-            current_question = random.choice(game_data['remaining_questions'])
-            game_data['remaining_questions'].remove(current_question)
+        next_question = get_next_question(game_data, increment_number=True)  # Increment only on correct answer
+        if next_question:
+            game_data['current_question'] = next_question
             game_data['waiting_for_next_question'] = False
+            start_time = time.time()
+            timer_active = True
         else:
             game_data['game_state'] = 'game_over'
+    elif key == ord('l') and game_data['waiting_for_confirmation']:
+        game_data['wrong_attempts'] += 1
+        if game_data['wrong_attempts'] >= 3:
+            game_data['game_state'] = 'game_over'
+        else:
+            next_question = get_next_question(game_data, increment_number=False)  # Don't increment on wrong answer
+            if next_question:
+                game_data['current_question'] = next_question
+            else:
+                game_data['game_state'] = 'game_over'
+            game_data['waiting_for_confirmation'] = False
+            start_time = time.time()
+            timer_active = True
     elif key == 8 and game_data['game_state'] == 'game_over':  # Backspace key
         game_data = reset_game()
-        current_question = random.choice(game_data['remaining_questions'])
-        game_data['remaining_questions'].remove(current_question)
+        game_data['current_question'] = get_next_question(game_data)
+        start_time = time.time()
+        timer_active = True
 
 cap.release()
 cv2.destroyAllWindows()
