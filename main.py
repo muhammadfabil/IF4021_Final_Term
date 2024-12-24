@@ -20,7 +20,7 @@ def reset_game():
         'wrong_attempts': 0,
         'waiting_for_next_question': False,
         'waiting_for_confirmation': False,
-        'current_question_number': 1,
+        'current_question_number': 0,
         'current_question': None,  # Store current question here
         'game_state': 'opening'
     }
@@ -44,7 +44,6 @@ def resize_image(image, target_width, target_height):
     return None
 
 logo_image = resize_image(logo_image, 400, 300)
-correct_image = resize_image(correct_image, 148, 59)
 game_over_image = resize_image(game_over_image, 400, 300)
 game_start_image = cv2.imread("assets/game_start.png", cv2.IMREAD_UNCHANGED)
 font_path = "assets/fonts/Poppins-ExtraBold.ttf"
@@ -55,8 +54,8 @@ for i in range(1, 11):  # 1/10 hingga 10/10
     counter_images.append(counter_image)
 
 def get_next_question(game_data, increment_number=False):
-    if increment_number:
-        game_data['current_question_number'] += 1
+    # Selalu increment nomor pertanyaan terlepas dari parameter increment_number
+    game_data['current_question_number'] += 1
     
     if game_data['remaining_questions']:
         question = random.choice(game_data['remaining_questions'])
@@ -118,7 +117,16 @@ while cap.isOpened():
 
         if timer_active:
             elapsed_time = time.time() - start_time
-            remaining_time = max(0, 5 - elapsed_time)
+            remaining_time = max(0, 7 - elapsed_time)
+
+            if remaining_time <= 0:
+                game_data['wrong_attempts'] += 1
+                timer_active = False
+                
+                if game_data['wrong_attempts'] >= 3:
+                    game_data['game_state'] = 'game_over'
+                else:
+                    game_data['waiting_for_confirmation'] = True
 
         # Tampilkan gambar pertanyaan
         question_image, position = load_question_image(game_data['current_question']["image"], frame)
@@ -126,15 +134,11 @@ while cap.isOpened():
         score_text = f"Score: {game_data['score']}  |  Timer: {remaining_time:.1f}s"
         text_size = cv2.getTextSize(score_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
         text_x = (frame.shape[1] - text_size[0]) // 2
-        frame = draw_custom_text(frame, score_text, (text_x, 30), font_path, 16, (214, 202, 178)) 
+        frame = draw_custom_text(frame, score_text, (text_x, 30), font_path, 16, (17, 32, 40)) 
 
-
-        if remaining_time <= 0 and timer_active and not game_data['waiting_for_confirmation']:
-            game_data['waiting_for_confirmation'] = True
-            timer_active = False
-
-        if game_data['waiting_for_confirmation']:
-            remaining_attempts = 2 - game_data['wrong_attempts']
+        if game_data['waiting_for_confirmation'] and game_data['wrong_attempts'] < 3:
+            # Tampilkan gambar error jika masih ada kesempatan
+            remaining_attempts = 3 - game_data['wrong_attempts']
             error_image = error_images.get(remaining_attempts, None)
 
             if error_image is not None:
@@ -144,10 +148,7 @@ while cap.isOpened():
                     frame, error_image, alpha_channel=True,
                     x_pos=(frame.shape[1] - error_image.shape[1]) // 2,  # Tempatkan di tengah horizontal
                     y_pos=y_pos
-                )   
-        # Periksa jika kesalahan sudah mencapai 3
-            if game_data['wrong_attempts'] >= 3:
-                game_data['game_state'] = 'game_over'
+                )
 
         if game_data['waiting_for_next_question']:
             # Ambil posisi gambar soal
@@ -164,25 +165,46 @@ while cap.isOpened():
                 fingers_count = count_fingers(hand_landmarks)
 
                 if 1 <= fingers_count <= 5:
-                    cv2.putText(frame, f"Jawaban Anda: {chr(64 + fingers_count)}", 
-                              (10, 400), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    answer_text = f"Jawaban Anda: {chr(64 + fingers_count)}"
+                    # Mengubah posisi y ke frame.shape[0] - 30 untuk menempatkan teks di bagian bawah
+                    # dan mengubah warna menjadi (17, 32, 40) atau #112028
+                    frame = draw_custom_text(frame, answer_text, (10, frame.shape[0] - 30), font_path, 16, (17, 32, 40))
 
                     if fingers_count == game_data['current_question']["answer"]:
                         game_data['waiting_for_next_question'] = True
-                        game_data['score'] += 1
+                        game_data['score'] += 10
                         timer_active = False
 
     elif game_data['game_state'] == 'game_over':
-        # Resize game_over_image agar pas
-        game_over_image_resized = resize_image(game_over_image, target_width=265, target_height=272)
-        
-        # Tentukan posisi gambar
-        x_pos = (frame.shape[1] - game_over_image_resized.shape[1]) // 2
-        y_pos = (frame.shape[0] - game_over_image_resized.shape[0]) // 2  # Tempatkan di tengah
-        
-        # Overlay gambar game over
-        frame = overlay_image(frame, game_over_image_resized, alpha_channel=True, x_pos=x_pos, y_pos=y_pos)
-        
+        # Jika semua pertanyaan telah dijawab
+        if len(game_data['remaining_questions']) == 0 and game_data['wrong_attempts'] < 3:
+            well_done_text = "Well Done!"
+            score_text = f"Skor Anda: {game_data['score']}"
+            restart_text = "Tekan 'Backspace' untuk main lagi"
+
+            # Hitung posisi teks agar berada di tengah layar
+            well_done_size = cv2.getTextSize(well_done_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+            score_size = cv2.getTextSize(score_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)[0]
+            restart_size = cv2.getTextSize(restart_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+
+            well_done_x = (frame.shape[1] - well_done_size[0]) // 2
+            score_x = (frame.shape[1] - score_size[0]) // 2
+            restart_x = (frame.shape[1] - restart_size[0]) // 2
+
+            well_done_y = (frame.shape[0] // 2) - 40
+            score_y = well_done_y + 30
+            restart_y = score_y + 40
+
+            # Tampilkan teks pada frame
+            frame = draw_custom_text(frame, well_done_text, (well_done_x, well_done_y), font_path, 20, (214, 202, 178))
+            frame = draw_custom_text(frame, score_text, (score_x, score_y), font_path, 16, (214, 202, 178))
+            frame = draw_custom_text(frame, restart_text, (restart_x, restart_y), font_path, 14, (214, 202, 178))
+        else:
+            # Tampilkan gambar Game Over jika gagal
+            game_over_image_resized = resize_image(game_over_image, target_width=265, target_height=272)
+            x_pos = (frame.shape[1] - game_over_image_resized.shape[1]) // 2
+            y_pos = (frame.shape[0] - game_over_image_resized.shape[0]) // 2
+            frame = overlay_image(frame, game_over_image_resized, alpha_channel=True, x_pos=x_pos, y_pos=y_pos)
 
     cv2.imshow("FingerFacts: Game Kuis Pilihan Ganda", frame)
 
@@ -195,7 +217,8 @@ while cap.isOpened():
         start_time = time.time()
         timer_active = True
     elif key == ord('n') and game_data['waiting_for_next_question']:
-        next_question = get_next_question(game_data, increment_number=True)  # Increment only on correct answer
+        # Hapus parameter increment_number karena sekarang selalu increment di fungsi get_next_question
+        next_question = get_next_question(game_data)
         if next_question:
             game_data['current_question'] = next_question
             game_data['waiting_for_next_question'] = False
@@ -204,11 +227,9 @@ while cap.isOpened():
         else:
             game_data['game_state'] = 'game_over'
     elif key == ord('l') and game_data['waiting_for_confirmation']:
-        game_data['wrong_attempts'] += 1
-        if game_data['wrong_attempts'] >= 3:
-            game_data['game_state'] = 'game_over'
-        else:
-            next_question = get_next_question(game_data, increment_number=False)  # Don't increment on wrong answer
+        if game_data['wrong_attempts'] < 3:
+            # Hapus parameter increment_number karena sekarang selalu increment di fungsi get_next_question
+            next_question = get_next_question(game_data)
             if next_question:
                 game_data['current_question'] = next_question
             else:
