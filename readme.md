@@ -17,9 +17,10 @@ Menggunakan teknologi **MediaPipe Hands** dan **OpenCV**, FingerFacts mendeteksi
 
 ## Requirements
 
-- `cv2`
+- `opencv-python`
 - `mediapipe`
-- `random`
+- `Pillow`
+- `numpy`
 
 ---
 
@@ -27,7 +28,7 @@ Menggunakan teknologi **MediaPipe Hands** dan **OpenCV**, FingerFacts mendeteksi
 
 1. Pastikan semua library yang diperlukan sudah terinstal dengan perintah:
    ```bash
-   pip install opencv-python mediapipe
+   pip install -r requirements.txt
    ```
 2. Jalankan skrip program:
    ```bash
