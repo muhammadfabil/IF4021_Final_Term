@@ -21,8 +21,8 @@ Menggunakan teknologi **MediaPipe Hands** dan **OpenCV**, FingerFacts mendeteksi
 |--------|-------------------------------------------------------------------------------------------|
 | 1      | Diskusi konsep permainan, penentuan teknologi yang akan digunakan, dan penyusunan tim.     |
 | 2      | Implementasi dasar deteksi tangan dengan MediaPipe dan integrasi OpenCV.                   |
-| 3      | Pengembangan logika permainan, pembuatan soal trivia, dan desain antarmuka dasar.          |
-| 4      | Uji coba permainan, debugging, dan perbaikan fitur untuk memastikan kelancaran permainan.  |
+| 3      | Pengembangan logika permainan, pembuatan soal trivia, dan desain antarmuka .          |
+| 4      | Uji coba permainan, debugging, dan perbaikan fitur untuk memastikan program berjalan lancar.  |
 
 ---
 
