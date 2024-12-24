@@ -1,7 +1,7 @@
 # utils.py
 
 import cv2
-from PIL import Image
+from PIL import ImageFont, ImageDraw, Image
 import numpy as np
 
 def count_fingers(hand_landmarks):
@@ -66,3 +66,28 @@ def load_question_image(image_path, frame, width=300, height=261, y_offset=50):
 
     return frame, (x_offset, y_offset, width, height)
 
+def draw_custom_text(frame, text, position, font_path, font_size, color):
+    """
+    Menggambar teks dengan font khusus menggunakan Pillow.
+    
+    Args:
+    - frame: Frame dari OpenCV (BGR).
+    - text: Teks yang ingin ditampilkan.
+    - position: Tuple (x, y) posisi teks.
+    - font_path: Path ke file font .ttf.
+    - font_size: Ukuran font.
+    - color: Warna teks (RGB tuple).
+    
+    Returns:
+    - frame dengan teks yang telah digambar.
+    """
+    # Konversi frame dari OpenCV (BGR) ke PIL (RGB)
+    frame_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    draw = ImageDraw.Draw(frame_pil)
+    font = ImageFont.truetype(font_path, font_size)
+    
+    # Tambahkan teks ke frame
+    draw.text(position, text, font=font, fill=color)
+    
+    # Konversi kembali ke OpenCV (BGR)
+    return cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)

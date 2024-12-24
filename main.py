@@ -2,7 +2,7 @@ import cv2
 import mediapipe as mp
 import random
 import time
-from utils import count_fingers, load_question_image
+from utils import count_fingers, load_question_image, draw_custom_text
 from questions import questions
 
 # Inisialisasi MediaPipe Hands
@@ -29,9 +29,13 @@ def reset_game():
 game_data = reset_game()
 
 # Load images
-logo_image = cv2.imread("asset/logo.png", cv2.IMREAD_UNCHANGED)
+logo_image = cv2.imread("assets/logo.png", cv2.IMREAD_UNCHANGED)
 correct_image = cv2.imread("correct.png", cv2.IMREAD_UNCHANGED)
 game_over_image = cv2.imread("game_over.png", cv2.IMREAD_UNCHANGED)
+error_images = {
+    1: cv2.imread("assets/error_1.png", cv2.IMREAD_UNCHANGED),
+    2: cv2.imread("assets/error_2.png", cv2.IMREAD_UNCHANGED)
+}
 
 # Resize images
 def resize_image(image, target_width, target_height):
@@ -40,8 +44,15 @@ def resize_image(image, target_width, target_height):
     return None
 
 logo_image = resize_image(logo_image, 400, 300)
-correct_image = resize_image(correct_image, 300, 200)
+correct_image = resize_image(correct_image, 148, 59)
 game_over_image = resize_image(game_over_image, 400, 300)
+game_start_image = cv2.imread("assets/game_start.png", cv2.IMREAD_UNCHANGED)
+font_path = "assets/fonts/Poppins-ExtraBold.ttf"
+counter_images = []
+for i in range(1, 11):  # 1/10 hingga 10/10
+    image_path = f"assets/counter/counter_{i}.png"  # Path ke gambar
+    counter_image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+    counter_images.append(counter_image)
 
 def get_next_question(game_data, increment_number=False):
     if increment_number:
@@ -56,21 +67,23 @@ def get_next_question(game_data, increment_number=False):
 # Get first question
 game_data['current_question'] = get_next_question(game_data)
 
-def overlay_image(frame, overlay, alpha_channel=True):
+def overlay_image(frame, overlay, alpha_channel=True, x_pos=0, y_pos=0):
     if overlay is None:
         return frame
     
-    overlay_x = (frame.shape[1] - overlay.shape[1]) // 2
-    overlay_y = (frame.shape[0] - overlay.shape[0]) // 2
     overlay_h, overlay_w = overlay.shape[:2]
-    
+
+    # Tentukan posisi overlay di dalam frame
+    overlay_x = x_pos
+    overlay_y = y_pos
+
     if all(v > 0 for v in [overlay_x, overlay_y, overlay_w, overlay_h]):
         for c in range(0, 3):
             frame_slice = frame[overlay_y:overlay_y + overlay_h, overlay_x:overlay_x + overlay_w, c]
             if alpha_channel:
-                alpha = overlay[..., 3] / 255.0
+                alpha = overlay[..., 3] / 255.0  # Jika ada transparansi (alpha channel)
             else:
-                alpha = 1.0
+                alpha = 1.0  # Jika tidak ada transparansi (untuk correct_image_resized)
             frame[overlay_y:overlay_y + overlay_h, overlay_x:overlay_x + overlay_w, c] = \
                 frame_slice * (1 - alpha) + overlay[..., c] * alpha
     
@@ -90,47 +103,60 @@ while cap.isOpened():
     results = hands.process(rgb_frame)
 
     if game_data['game_state'] == 'opening':
-        frame = overlay_image(frame, logo_image)
-        cv2.putText(frame, "Tekan SPACE untuk memulai permainan", 
-                   (int(frame.shape[1]/2) - 200, frame.shape[0] - 50), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        x_pos = (frame.shape[1] - game_start_image.shape[1]) // 2
+        y_pos = (frame.shape[0] - game_start_image.shape[0]) // 2
+
+        # Overlay gambar game_start_image
+        frame = overlay_image(frame, game_start_image, alpha_channel=True, x_pos=x_pos, y_pos=y_pos)
 
     elif game_data['game_state'] == 'playing':
-        # Show question number in top right
-        cv2.putText(frame, f"Soal: {game_data['current_question_number']}/10", 
-                   (frame.shape[1] - 150, 30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        # Tampilkan soal dan elemen lainnya di sini
+
+        # Tampilkan gambar counter soal (1/10 hingga 10/10)
+        counter_image = counter_images[game_data['current_question_number'] - 1]  # Ambil gambar yang sesuai dengan soal
+        frame = overlay_image(frame, counter_image, alpha_channel=True, x_pos=frame.shape[1] - counter_image.shape[1] - 10, y_pos=10)  # Menempatkan gambar di kanan atas
 
         if timer_active:
             elapsed_time = time.time() - start_time
             remaining_time = max(0, 5 - elapsed_time)
-        
-        cv2.putText(frame, f"Timer: {remaining_time:.1f}s", (10, 90), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
         # Tampilkan gambar pertanyaan
         question_image, position = load_question_image(game_data['current_question']["image"], frame)
+        x_offset, y_offset, width, height = position
+        score_text = f"Score: {game_data['score']}  |  Timer: {remaining_time:.1f}s"
+        text_size = cv2.getTextSize(score_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+        text_x = (frame.shape[1] - text_size[0]) // 2
+        frame = draw_custom_text(frame, score_text, (text_x, 30), font_path, 16, (214, 202, 178)) 
 
-        # Tampilkan skor dan kesalahan
-        cv2.putText(frame, f"Score: {game_data['score']}", (10, 30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        cv2.putText(frame, f"Kesalahan: {game_data['wrong_attempts']}/3", (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
         if remaining_time <= 0 and timer_active and not game_data['waiting_for_confirmation']:
             game_data['waiting_for_confirmation'] = True
             timer_active = False
 
         if game_data['waiting_for_confirmation']:
-            cv2.putText(frame, "Waktu habis! Tekan L untuk melanjutkan", 
-                       (int(frame.shape[1]/2) - 200, frame.shape[0] - 40), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            remaining_attempts = 2 - game_data['wrong_attempts']
+            error_image = error_images.get(remaining_attempts, None)
+
+            if error_image is not None:
+                question_image_height = position[3]  # Tinggi gambar pertanyaan
+                y_pos = position[1] + question_image_height + 10  # Posisikan di bawah gambar pertanyaan
+                frame = overlay_image(
+                    frame, error_image, alpha_channel=True,
+                    x_pos=(frame.shape[1] - error_image.shape[1]) // 2,  # Tempatkan di tengah horizontal
+                    y_pos=y_pos
+                )   
+        # Periksa jika kesalahan sudah mencapai 3
+            if game_data['wrong_attempts'] >= 3:
+                game_data['game_state'] = 'game_over'
 
         if game_data['waiting_for_next_question']:
-            frame = overlay_image(frame, correct_image)
-            cv2.putText(frame, "Tekan 'N' untuk pertanyaan selanjutnya", 
-                       (10, frame.shape[0] - 20), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            # Ambil posisi gambar soal
+            correct_image = cv2.imread('correct.png', cv2.IMREAD_UNCHANGED)
+            question_image_height = position[3]
+            y_pos = position[1] + question_image_height + 10
+            frame = overlay_image(frame, correct_image, alpha_channel=True, 
+                                x_pos=(frame.shape[1] - correct_image.shape[1]) // 2, 
+                                y_pos=y_pos)
 
         if results.multi_hand_landmarks and not game_data['waiting_for_next_question'] and not game_data['waiting_for_confirmation']:
             for hand_landmarks in results.multi_hand_landmarks:
@@ -147,13 +173,16 @@ while cap.isOpened():
                         timer_active = False
 
     elif game_data['game_state'] == 'game_over':
-        frame = overlay_image(frame, game_over_image)
-        cv2.putText(frame, f"Total Score: {game_data['score']}", 
-                   (int(frame.shape[1]/2) - 100, frame.shape[0] - 80), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-        cv2.putText(frame, "Tekan BACKSPACE untuk main lagi", 
-                   (int(frame.shape[1]/2) - 200, frame.shape[0] - 40), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        # Resize game_over_image agar pas
+        game_over_image_resized = resize_image(game_over_image, target_width=265, target_height=272)
+        
+        # Tentukan posisi gambar
+        x_pos = (frame.shape[1] - game_over_image_resized.shape[1]) // 2
+        y_pos = (frame.shape[0] - game_over_image_resized.shape[0]) // 2  # Tempatkan di tengah
+        
+        # Overlay gambar game over
+        frame = overlay_image(frame, game_over_image_resized, alpha_channel=True, x_pos=x_pos, y_pos=y_pos)
+        
 
     cv2.imshow("FingerFacts: Game Kuis Pilihan Ganda", frame)
 
