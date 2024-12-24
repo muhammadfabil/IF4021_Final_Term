@@ -31,7 +31,7 @@ game_data = reset_game()
 # Load images
 logo_image = cv2.imread("assets/logo.png", cv2.IMREAD_UNCHANGED)
 correct_image = cv2.imread("correct.png", cv2.IMREAD_UNCHANGED)
-game_over_image = cv2.imread("game_over.png", cv2.IMREAD_UNCHANGED)
+game_over_image = cv2.imread("assets/game_over.png", cv2.IMREAD_UNCHANGED)
 error_images = {
     1: cv2.imread("assets/error_1.png", cv2.IMREAD_UNCHANGED),
     2: cv2.imread("assets/error_2.png", cv2.IMREAD_UNCHANGED)
@@ -152,7 +152,7 @@ while cap.isOpened():
 
         if game_data['waiting_for_next_question']:
             # Ambil posisi gambar soal
-            correct_image = cv2.imread('correct.png', cv2.IMREAD_UNCHANGED)
+            correct_image = cv2.imread('assets/correct.png', cv2.IMREAD_UNCHANGED)
             question_image_height = position[3]
             y_pos = position[1] + question_image_height + 10
             frame = overlay_image(frame, correct_image, alpha_channel=True, 
