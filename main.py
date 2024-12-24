@@ -5,15 +5,29 @@ import time
 from utils import count_fingers, load_question_image, draw_custom_text
 from questions import questions
 
-# Inisialisasi MediaPipe Hands
+# Inisialisasi MediaPipe Hands untuk deteksi tangan
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.7)
 
-# Inisialisasi Kamera
+# Inisialisasi kamera untuk capture video
 cap = cv2.VideoCapture(0)
 
 def reset_game():
+    """
+    Menginisialisasi ulang state game ke kondisi awal.
+    
+    Returns:
+        dict: Dictionary berisi state awal game dengan keys:
+            - remaining_questions: List pertanyaan yang tersisa
+            - score: Skor pemain
+            - wrong_attempts: Jumlah jawaban salah
+            - waiting_for_next_question: Status menunggu pertanyaan berikutnya
+            - waiting_for_confirmation: Status menunggu konfirmasi
+            - current_question_number: Nomor pertanyaan saat ini
+            - current_question: Pertanyaan yang sedang aktif
+            - game_state: State game (opening/playing/game_over)
+    """
     return {
         'remaining_questions': questions.copy(),
         'score': 0,
@@ -21,14 +35,14 @@ def reset_game():
         'waiting_for_next_question': False,
         'waiting_for_confirmation': False,
         'current_question_number': 0,
-        'current_question': None,  # Store current question here
+        'current_question': None,
         'game_state': 'opening'
     }
 
-# Initialize game state
+# Inisialisasi state game
 game_data = reset_game()
 
-# Load images
+# Load semua asset gambar yang diperlukan
 logo_image = cv2.imread("assets/logo.png", cv2.IMREAD_UNCHANGED)
 correct_image = cv2.imread("correct.png", cv2.IMREAD_UNCHANGED)
 game_over_image = cv2.imread("assets/game_over.png", cv2.IMREAD_UNCHANGED)
@@ -37,24 +51,45 @@ error_images = {
     2: cv2.imread("assets/error_2.png", cv2.IMREAD_UNCHANGED)
 }
 
-# Resize images
 def resize_image(image, target_width, target_height):
+    """
+    Mengubah ukuran gambar sesuai dengan dimensi target.
+    
+    Args:
+        image: Gambar yang akan diubah ukurannya
+        target_width: Lebar target
+        target_height: Tinggi target
+    
+    Returns:
+        Gambar yang telah diresize atau None jika input invalid
+    """
     if image is not None:
         return cv2.resize(image, (target_width, target_height), interpolation=cv2.INTER_AREA)
     return None
 
+# Resize gambar-gambar utama
 logo_image = resize_image(logo_image, 400, 300)
 game_over_image = resize_image(game_over_image, 400, 300)
 game_start_image = cv2.imread("assets/game_start.png", cv2.IMREAD_UNCHANGED)
 font_path = "assets/fonts/Poppins-ExtraBold.ttf"
+
+# Load gambar counter (1/10 hingga 10/10)
 counter_images = []
-for i in range(1, 11):  # 1/10 hingga 10/10
-    image_path = f"assets/counter/counter_{i}.png"  # Path ke gambar
+for i in range(1, 11):
+    image_path = f"assets/counter/counter_{i}.png"
     counter_image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
     counter_images.append(counter_image)
 
-def get_next_question(game_data, increment_number=False):
-    # Selalu increment nomor pertanyaan terlepas dari parameter increment_number
+def get_next_question(game_data):
+    """
+    Mengambil pertanyaan berikutnya secara random dari sisa pertanyaan yang ada.
+    
+    Args:
+        game_data: Dictionary berisi state game
+    
+    Returns:
+        Dict pertanyaan berikutnya atau None jika sudah tidak ada pertanyaan
+    """
     game_data['current_question_number'] += 1
     
     if game_data['remaining_questions']:
@@ -63,16 +98,27 @@ def get_next_question(game_data, increment_number=False):
         return question
     return None
 
-# Get first question
+# Ambil pertanyaan pertama
 game_data['current_question'] = get_next_question(game_data)
 
 def overlay_image(frame, overlay, alpha_channel=True, x_pos=0, y_pos=0):
+    """
+    Menggabungkan gambar overlay ke frame dengan mempertahankan transparansi.
+    
+    Args:
+        frame: Frame utama
+        overlay: Gambar yang akan di-overlay
+        alpha_channel: Boolean untuk menggunakan alpha channel
+        x_pos: Posisi x overlay
+        y_pos: Posisi y overlay
+    
+    Returns:
+        Frame yang telah ditambahkan overlay
+    """
     if overlay is None:
         return frame
     
     overlay_h, overlay_w = overlay.shape[:2]
-
-    # Tentukan posisi overlay di dalam frame
     overlay_x = x_pos
     overlay_y = y_pos
 
@@ -80,41 +126,44 @@ def overlay_image(frame, overlay, alpha_channel=True, x_pos=0, y_pos=0):
         for c in range(0, 3):
             frame_slice = frame[overlay_y:overlay_y + overlay_h, overlay_x:overlay_x + overlay_w, c]
             if alpha_channel:
-                alpha = overlay[..., 3] / 255.0  # Jika ada transparansi (alpha channel)
+                alpha = overlay[..., 3] / 255.0
             else:
-                alpha = 1.0  # Jika tidak ada transparansi (untuk correct_image_resized)
+                alpha = 1.0
             frame[overlay_y:overlay_y + overlay_h, overlay_x:overlay_x + overlay_w, c] = \
                 frame_slice * (1 - alpha) + overlay[..., c] * alpha
     
     return frame
 
+# Inisialisasi waktu awal untuk timer
 start_time = time.time()
 timer_active = True
 
+# Loop utama game
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         print("Tidak dapat membaca frame dari kamera.")
         break
 
-    # Konversi ke RGB
+    # Konversi frame ke RGB untuk MediaPipe
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(rgb_frame)
 
+    # State: Opening Screen
     if game_data['game_state'] == 'opening':
+        # Tampilkan layar pembuka game
         x_pos = (frame.shape[1] - game_start_image.shape[1]) // 2
         y_pos = (frame.shape[0] - game_start_image.shape[0]) // 2
-
-        # Overlay gambar game_start_image
         frame = overlay_image(frame, game_start_image, alpha_channel=True, x_pos=x_pos, y_pos=y_pos)
 
+    # State: Playing Game
     elif game_data['game_state'] == 'playing':
-        # Tampilkan soal dan elemen lainnya di sini
+        # Tampilkan counter pertanyaan
+        counter_image = counter_images[game_data['current_question_number'] - 1]
+        frame = overlay_image(frame, counter_image, alpha_channel=True, 
+                            x_pos=frame.shape[1] - counter_image.shape[1] - 10, y_pos=10)
 
-        # Tampilkan gambar counter soal (1/10 hingga 10/10)
-        counter_image = counter_images[game_data['current_question_number'] - 1]  # Ambil gambar yang sesuai dengan soal
-        frame = overlay_image(frame, counter_image, alpha_channel=True, x_pos=frame.shape[1] - counter_image.shape[1] - 10, y_pos=10)  # Menempatkan gambar di kanan atas
-
+        # Kelola timer dan kesempatan menjawab
         if timer_active:
             elapsed_time = time.time() - start_time
             remaining_time = max(0, 7 - elapsed_time)
@@ -128,30 +177,30 @@ while cap.isOpened():
                 else:
                     game_data['waiting_for_confirmation'] = True
 
-        # Tampilkan gambar pertanyaan
+        # Tampilkan gambar pertanyaan dan skor
         question_image, position = load_question_image(game_data['current_question']["image"], frame)
         x_offset, y_offset, width, height = position
         score_text = f"Score: {game_data['score']}  |  Timer: {remaining_time:.1f}s"
         text_size = cv2.getTextSize(score_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
         text_x = (frame.shape[1] - text_size[0]) // 2
-        frame = draw_custom_text(frame, score_text, (text_x, 30), font_path, 16, (17, 32, 40)) 
+        frame = draw_custom_text(frame, score_text, (text_x, 30), font_path, 16, (17, 32, 40))
 
+        # Tampilkan feedback jawaban salah
         if game_data['waiting_for_confirmation'] and game_data['wrong_attempts'] < 3:
-            # Tampilkan gambar error jika masih ada kesempatan
             remaining_attempts = 3 - game_data['wrong_attempts']
             error_image = error_images.get(remaining_attempts, None)
 
             if error_image is not None:
-                question_image_height = position[3]  # Tinggi gambar pertanyaan
-                y_pos = position[1] + question_image_height + 10  # Posisikan di bawah gambar pertanyaan
+                question_image_height = position[3]
+                y_pos = position[1] + question_image_height + 10
                 frame = overlay_image(
                     frame, error_image, alpha_channel=True,
-                    x_pos=(frame.shape[1] - error_image.shape[1]) // 2,  # Tempatkan di tengah horizontal
+                    x_pos=(frame.shape[1] - error_image.shape[1]) // 2,
                     y_pos=y_pos
                 )
 
+        # Tampilkan feedback jawaban benar
         if game_data['waiting_for_next_question']:
-            # Ambil posisi gambar soal
             correct_image = cv2.imread('assets/correct.png', cv2.IMREAD_UNCHANGED)
             question_image_height = position[3]
             y_pos = position[1] + question_image_height + 10
@@ -159,6 +208,7 @@ while cap.isOpened():
                                 x_pos=(frame.shape[1] - correct_image.shape[1]) // 2, 
                                 y_pos=y_pos)
 
+        # Proses deteksi jari dan jawaban
         if results.multi_hand_landmarks and not game_data['waiting_for_next_question'] and not game_data['waiting_for_confirmation']:
             for hand_landmarks in results.multi_hand_landmarks:
                 mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
@@ -166,8 +216,6 @@ while cap.isOpened():
 
                 if 1 <= fingers_count <= 5:
                     answer_text = f"Jawaban Anda: {chr(64 + fingers_count)}"
-                    # Mengubah posisi y ke frame.shape[0] - 30 untuk menempatkan teks di bagian bawah
-                    # dan mengubah warna menjadi (17, 32, 40) atau #112028
                     frame = draw_custom_text(frame, answer_text, (10, frame.shape[0] - 30), font_path, 16, (17, 32, 40))
 
                     if fingers_count == game_data['current_question']["answer"]:
@@ -175,14 +223,15 @@ while cap.isOpened():
                         game_data['score'] += 10
                         timer_active = False
 
+    # State: Game Over
     elif game_data['game_state'] == 'game_over':
-        # Jika semua pertanyaan telah dijawab
+        # Tampilkan layar selesai jika berhasil menyelesaikan semua pertanyaan
         if len(game_data['remaining_questions']) == 0 and game_data['wrong_attempts'] < 3:
             well_done_text = "Well Done!"
             score_text = f"Skor Anda: {game_data['score']}"
             restart_text = "Tekan 'Backspace' untuk main lagi"
 
-            # Hitung posisi teks agar berada di tengah layar
+            # Hitung posisi teks untuk centered alignment
             well_done_size = cv2.getTextSize(well_done_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
             score_size = cv2.getTextSize(score_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)[0]
             restart_size = cv2.getTextSize(restart_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
@@ -195,29 +244,29 @@ while cap.isOpened():
             score_y = well_done_y + 30
             restart_y = score_y + 40
 
-            # Tampilkan teks pada frame
+            # Render teks
             frame = draw_custom_text(frame, well_done_text, (well_done_x, well_done_y), font_path, 20, (214, 202, 178))
             frame = draw_custom_text(frame, score_text, (score_x, score_y), font_path, 16, (214, 202, 178))
             frame = draw_custom_text(frame, restart_text, (restart_x, restart_y), font_path, 14, (214, 202, 178))
         else:
-            # Tampilkan gambar Game Over jika gagal
+            # Tampilkan layar game over jika gagal
             game_over_image_resized = resize_image(game_over_image, target_width=265, target_height=272)
             x_pos = (frame.shape[1] - game_over_image_resized.shape[1]) // 2
             y_pos = (frame.shape[0] - game_over_image_resized.shape[0]) // 2
             frame = overlay_image(frame, game_over_image_resized, alpha_channel=True, x_pos=x_pos, y_pos=y_pos)
 
+    # Tampilkan window game
     cv2.imshow("FingerFacts: Game Kuis Pilihan Ganda", frame)
 
-    # Handle keyboard input
+    # Handle input keyboard
     key = cv2.waitKey(1) & 0xFF
-    if key == ord('q'):
+    if key == ord('q'):  # Keluar dari game
         break
-    elif key == ord(' ') and game_data['game_state'] == 'opening':
+    elif key == ord(' ') and game_data['game_state'] == 'opening':  # Mulai game
         game_data['game_state'] = 'playing'
         start_time = time.time()
         timer_active = True
-    elif key == ord('n') and game_data['waiting_for_next_question']:
-        # Hapus parameter increment_number karena sekarang selalu increment di fungsi get_next_question
+    elif key == ord('n') and game_data['waiting_for_next_question']:  # Lanjut ke pertanyaan berikutnya
         next_question = get_next_question(game_data)
         if next_question:
             game_data['current_question'] = next_question
@@ -226,9 +275,8 @@ while cap.isOpened():
             timer_active = True
         else:
             game_data['game_state'] = 'game_over'
-    elif key == ord('l') and game_data['waiting_for_confirmation']:
+    elif key == ord('l') and game_data['waiting_for_confirmation']:  # Coba lagi setelah jawaban salah
         if game_data['wrong_attempts'] < 3:
-            # Hapus parameter increment_number karena sekarang selalu increment di fungsi get_next_question
             next_question = get_next_question(game_data)
             if next_question:
                 game_data['current_question'] = next_question
