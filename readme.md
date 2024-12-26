@@ -65,3 +65,6 @@ Proyek ini menggunakan lisensi [MIT](https://opensource.org/licenses/MIT).
 
 Selamat bermain dan belajar dengan **FingerFacts**! 🚀
 
+
+Project ini adalah tugas akhir dari mata kuliah Sistem/Teknologi Multimedia Program Studi Teknik Informatika ITERA yang diampu oleh Bapak Martin Clinton Tosima Manullang, S.T., M.T.
+
